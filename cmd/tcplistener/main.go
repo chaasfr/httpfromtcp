@@ -1,11 +1,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
-	"os"
 	"strings"
 )
 
@@ -15,23 +15,26 @@ func getLinesChannel(conn net.Conn) <-chan string {
 	go func() {
 		defer conn.Close()
 		defer close(result)
-		var newLine string
+		newLine := ""
 		for {
 			slice := make([]byte, 8)
 			_, err := conn.Read(slice)
-			if err == io.EOF{
-				break
+			if err != nil {
+				if newLine != "" {
+					result <- newLine
+				}
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				fmt.Printf("error: %s\n", err.Error())
+				return
 			}
 			sliced := strings.Split(string(slice), "\n")
-			newLine += sliced[0]
-			for i := 1 ; i < len(sliced)-1; i++ {
-				result <- newLine
-				newLine = sliced[i]
+			for i := 0 ; i < len(sliced)-1; i++ {
+				result <- fmt.Sprintf("%s%s", newLine, sliced[i])
+				newLine = ""
 			}
-		}
-
-		if newLine != "" {
-			result <- newLine
+			newLine += sliced[len(sliced)-1]
 		}
 	}()
 
@@ -42,21 +45,19 @@ func main() {
 	ln, err := net.Listen("tcp", ":42069")
 	if err != nil {
 		log.Fatalf("could not listen %s: %s\n", ln, err)
-		os.Exit(1)
 	}
 	defer ln.Close()
 
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-		log.Fatalf("could not open conn %s: %s\n", conn, err)
-		os.Exit(1)
+			log.Fatalf("could not open conn %s: %s\n", conn, err)
 		}
 		fmt.Println("==== Connection has been accepted ====")
 		linesChannel := getLinesChannel(conn)
 		for line := range linesChannel {
-			fmt.Printf("read: %s\n", line)
+			fmt.Println(line)
 		}
-		fmt.Println("==== Connection has been closed ====")
+		fmt.Println("==== Connection ", conn.RemoteAddr()," has been closed ====")
 	}
 }
