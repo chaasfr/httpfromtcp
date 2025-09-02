@@ -86,15 +86,15 @@ func parseRequestLine(data []byte) (int, *RequestLine, error) {
 }
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	data := make([]byte,bufferSize, bufferSize)
+	data := make([]byte,bufferSize)
 	readToIndex := 0
 	req := Request{
 		State: INITIALIZED,
 	}
 
 	for req.State != DONE {
-		if readToIndex == len(data) {
-			newData := make([]byte, len(data)*2, len(data)*2)
+		if readToIndex >= len(data) {
+			newData := make([]byte, len(data)*2)
 			copy(newData, data)
 			data = newData
 		}
@@ -107,12 +107,11 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 			return nil, err
 		}
 		readToIndex += nbrBytesRead
-		nbrBytesParsed, err := req.parse(data)
+		nbrBytesParsed, err := req.parse(data[:readToIndex])
 		if err != nil {
 			return nil, err
 		}
-		newData := make([]byte, len(data)-nbrBytesParsed,len(data)-nbrBytesParsed)
-		copy(newData, data[nbrBytesParsed:])
+		copy(data, data[nbrBytesParsed:])
 		readToIndex -= nbrBytesParsed
 	}
 
