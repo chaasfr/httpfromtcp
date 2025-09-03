@@ -8,6 +8,8 @@ import (
 
 const crlf = "\r\n"
 
+const allowedCharsForKey="abcdefghijklmnopqrstuvwxyz0123456789!#$%&'*+-.^_`|~"
+
 type Headers map[string]string
 
 func NewHeaders()(Headers) {
@@ -39,7 +41,18 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 		return 0, false, errors.New("wrong header format: unexpected whitespace before ':'")
 	}
 
-	key := strings.TrimLeft(sliced[0], " ")
+	key := strings.ToLower(strings.TrimLeft(sliced[0], " "))
+
+	if len(key) < 1 {
+		return 0, false, errors.New("header key must have a length of 1 or more")
+	}
+
+	for _, l := range key {
+		if !strings.Contains(allowedCharsForKey,string(l)) {
+			return 0, false, errors.New("wrong character " + string(l) + "in header key " + key)
+		}
+	}
+
 	value := strings.Trim(sliced[1], " ")
 
 	h.Set(key, string(value))
