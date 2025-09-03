@@ -17,7 +17,11 @@ func NewHeaders()(Headers) {
 }
 
 func (h Headers) Set(key, value string) {
-	h[key] = value
+	if currentVal, contained := h[key] ; contained {
+		h[key] = currentVal + ", " + value
+	} else {
+		h[key] = value
+	}
 }
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {

@@ -40,6 +40,16 @@ func TestHeadersParse(t *testing.T) {
 	assert.Equal(t, 25, n)
 	assert.False(t, done)
 
+	// Test: Valid Additional value to existing header
+	headers = map[string]string{"mains": "chris-mains-senna"}
+	data = []byte("mains: jeannot-mains-teemo\r\nAccept: */*\r\n\r\n")
+	n, done, err = headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	assert.Equal(t, "chris-mains-senna, jeannot-mains-teemo", headers["mains"])
+	assert.Equal(t, 28, n)
+	assert.False(t, done)
+
 	// Test: "Valid done"
 	headers = NewHeaders()
 	data = []byte("\r\n{randomstuff:ok}\r\n")
@@ -57,12 +67,11 @@ func TestHeadersParse(t *testing.T) {
 	assert.Equal(t, 0, n)
 	assert.False(t, done)
 	
-
-		// Test: Invalid character in a header
-		headers = NewHeaders()
-		data = []byte("H@st: localhost:42069\r\n\r\n")
-		n, done, err = headers.Parse(data)
-		require.Error(t, err)
-		assert.Equal(t, 0, n)
-		assert.False(t, done)
+	// Test: Invalid character in a header
+	headers = NewHeaders()
+	data = []byte("H@st: localhost:42069\r\n\r\n")
+	n, done, err = headers.Parse(data)
+	require.Error(t, err)
+	assert.Equal(t, 0, n)
+	assert.False(t, done)
 }
