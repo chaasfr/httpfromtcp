@@ -85,6 +85,8 @@ func parseRequestLine(data []byte) (int, *RequestLine, error) {
 	return idx, &requestLine, nil
 }
 
+
+
 func RequestFromReader(reader io.Reader) (*Request, error) {
 	data := make([]byte,bufferSize)
 	readToIndex := 0
