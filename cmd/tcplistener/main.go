@@ -33,7 +33,10 @@ func main() {
 		for key, value := range req.Headers {
 			fmt.Println(" - " + key + ": " + value)
 		}
-		
+
+		fmt.Println("Body:")
+		fmt.Println(string(req.Body))
+
 		fmt.Println("==== Connection ", conn.RemoteAddr()," has been closed ====")
 	}
 }
