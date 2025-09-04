@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -19,6 +20,7 @@ type RequestState int
 const (
 	INITIALIZED RequestState = iota
 	PARSING_HEADERS
+	PARSING_BODY
 	DONE
 )
 
@@ -26,7 +28,7 @@ type Request struct {
 	state       RequestState
 	RequestLine RequestLine
 	Headers     headers.Headers
-	// Body        []byte
+	Body        []byte
 }
 
 type RequestLine struct {
@@ -54,9 +56,29 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 			return 0, err
 		}
 		if done {
-			r.state = DONE
+			r.state = PARSING_BODY
 		}
 		return nbrBytesConsumed, nil
+	case PARSING_BODY:
+		contentLength := r.Headers.Get("content-length")
+		if contentLength == "" {
+			r.state = DONE
+			return 0, nil
+		}
+		contentLengthInt, err := strconv.Atoi(contentLength)
+		if err != nil {
+			return 0, err
+		}
+		r.Body = append(r.Body,data...)
+		if int(contentLengthInt) < len(r.Body) {
+			return 0, errors.New("body is longer than contentLength of " +
+			 contentLength +
+			" :" + string(r.Body))
+		}
+		if int(contentLengthInt) == len(r.Body) {
+			r.state = DONE
+		}
+		return len(data), nil
 	case DONE:
 		return 0, errors.New("error: trying to read data in a done state")
 	default:

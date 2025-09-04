@@ -29,6 +29,11 @@ func main() {
 		fmt.Println(" - Target: " + req.RequestLine.RequestTarget)
 		fmt.Println(" - Version: " + req.RequestLine.HttpVersion)
 
+		fmt.Println("Headers:")
+		for key, value := range req.Headers {
+			fmt.Println(" - " + key + ": " + value)
+		}
+		
 		fmt.Println("==== Connection ", conn.RemoteAddr()," has been closed ====")
 	}
 }

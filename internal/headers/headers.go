@@ -28,6 +28,14 @@ func (h Headers) Set(key, value string) {
 	h[key] = value
 }
 
+func (h Headers) Get(key string)(string) {
+	lkey := strings.ToLower(key)
+	if val, ok := h[lkey]; ok {
+		return val
+	} 
+	return ""
+}
+
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	idx := bytes.Index(data, []byte(crlf))
 	if idx == -1 {
