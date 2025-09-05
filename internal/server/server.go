@@ -3,7 +3,6 @@ package server
 import (
 	"HTTPFROMTCP/internal/request"
 	"HTTPFROMTCP/internal/response"
-	"bytes"
 	"log"
 	"net"
 )
@@ -56,25 +55,15 @@ func (s *Server) listen() {
 }
 
 func (s *Server) handle(conn net.Conn) {
+	w := response.NewWriter(conn)
 	req, err := request.RequestFromReader(conn)
 	if err != nil {
 		hErr := &HandlerError{
 			StatusCode: response.BAD_REQ,
 			Message:    err.Error(),
 		}
-		hErr.Write(conn)
+		hErr.Write(w)
 	}
 
-	buffer := bytes.NewBuffer([]byte{})
-	handlerError := s.handler(buffer, req)
-	if handlerError != nil {
-		handlerError.Write(conn)
-		return
-	}
-
-	response.WriteStatusLine(conn, response.OK)
-	headers := response.GetDefaultHeaders(buffer.Len())
-	response.WriteHeaders(conn, headers)
-
-	conn.Write(buffer.Bytes())
+	s.handler(w, req)
 }

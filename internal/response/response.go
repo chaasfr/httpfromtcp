@@ -2,8 +2,9 @@ package response
 
 import (
 	"HTTPFROMTCP/internal/headers"
-	"io"
+	"errors"
 	"fmt"
+	"io"
 )
 
 type StatusCode int
@@ -14,7 +15,34 @@ const (
 	INTERNAL_ERROR StatusCode = 500
 )
 
-func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
+type WriterState int
+
+const (
+	AWAITING_STATUS_LINE WriterState = iota
+	AWAITING_HEADERS
+	AWAITING_BODY
+	DONE
+)
+
+type Writer struct {
+	StatusLine []byte
+	Headers    []byte
+	Body       []byte
+	Writer     io.Writer
+	State      WriterState
+}
+
+func NewWriter(w io.Writer) *Writer{
+	return &Writer{
+		State: AWAITING_STATUS_LINE,
+		Writer: w,
+	}
+}
+
+func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
+	if w.State != AWAITING_STATUS_LINE {
+		return errors.New("error: trying to write status line during invalid state")
+	}
 	var msg string
 	switch statusCode {
 	case OK:
@@ -26,7 +54,9 @@ func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
 	default:
 		msg = ""
 	}
-	_, err := w.Write([]byte(msg + "\r\n"))
+	w.StatusLine = []byte(msg + "\r\n")
+	_, err := w.Writer.Write(w.StatusLine)
+	w.State = AWAITING_HEADERS
 	return err
 }
 
@@ -40,14 +70,25 @@ func GetDefaultHeaders(contentLen int) headers.Headers {
 	return h
 }
 
-func WriteHeaders(w io.Writer, headers headers.Headers) error {
+func (w *Writer) WriteHeaders(headers headers.Headers) error {
+	if w.State != AWAITING_HEADERS {
+		return errors.New("error: trying to write headers during invalid state")
+	}
 	for k, v := range headers {
 		txt := k + ": " + v + "\r\n"
-		_, err := w.Write([]byte(txt))
-		if err != nil {
-			return err
-		}
+		w.Headers = append(w.Headers,[]byte(txt)...)
 	}
-	_, err := w.Write([]byte("\r\n"))
+	w.Headers = append(w.Headers, []byte("\r\n")...)
+
+	_, err := w.Writer.Write(w.Headers)
+	w.State = AWAITING_BODY
 	return err
+}
+
+func (w *Writer) WriteBody(p []byte) (int, error) {
+	if w.State != AWAITING_BODY {
+		return 0, errors.New("error: trying to write body during invalid state")
+	}
+	w.Body = p
+	return w.Writer.Write(w.Body)
 }

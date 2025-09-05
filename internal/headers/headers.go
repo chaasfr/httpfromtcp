@@ -28,6 +28,10 @@ func (h Headers) Set(key, value string) {
 	h[key] = value
 }
 
+func (h Headers) Replace(key, value string) {
+	h[strings.ToLower(key)] = value
+}
+
 func (h Headers) Get(key string)(string) {
 	lkey := strings.ToLower(key)
 	if val, ok := h[lkey]; ok {
