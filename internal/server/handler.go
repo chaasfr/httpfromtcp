@@ -2,23 +2,22 @@ package server
 
 import (
 	"HTTPFROMTCP/internal/request"
-	"fmt"
+	"HTTPFROMTCP/internal/response"
 	"io"
-	"log"
 )
 
 type HandlerError struct {
-	StatusCode int
+	StatusCode response.StatusCode
 	Message    string
 }
 
 type Handler func(w io.Writer, req *request.Request) *HandlerError
 
 
-func (he HandlerError) write(w io.Writer) {
-	txt := "error code: " + fmt.Sprint(he.StatusCode) + "\n messsage: " + he.Message
-	_, err := w.Write([]byte(txt))
-	if err != nil {
-		log.Fatalf("error writing handlerError: %s\n", err)
-	}
+func (he HandlerError) Write(w io.Writer) {
+	response.WriteStatusLine(w, he.StatusCode)
+	messageBytes := []byte(he.Message)
+	headers := response.GetDefaultHeaders(len(messageBytes))
+	response.WriteHeaders(w, headers)
+	w.Write(messageBytes)
 }

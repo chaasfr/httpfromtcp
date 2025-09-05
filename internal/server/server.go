@@ -18,6 +18,7 @@ const (
 type Server struct {
 	ServerState ServerState
 	listener net.Listener
+	handler Handler
 }
 
 func Serve(port int, handler Handler) (*Server, error) {
@@ -28,8 +29,9 @@ func Serve(port int, handler Handler) (*Server, error) {
 	server := &Server{
 		ServerState: INITIALIZED,
 		listener: ln,
+		handler: handler,
 	}
-	server.listen(handler)
+	go server.listen()
 
 	return server, nil
 }
@@ -43,39 +45,36 @@ func (s *Server) Close() error {
 	return nil
 }
 
-func (s *Server) listen(handler Handler) {
+func (s *Server) listen() {
 	for s.ServerState != CLOSED {
 		conn, err := s.listener.Accept()
 		if err != nil {
 			log.Fatalf("could not open conn %s: %s\n", conn, err)
 		}
-		go s.handle(conn, handler)
+		go s.handle(conn)
 	}
 }
 
-func (s *Server) handle(conn net.Conn, handler Handler) {
+func (s *Server) handle(conn net.Conn) {
 	req, err := request.RequestFromReader(conn)
 	if err != nil {
-		log.Fatalf("error parsing request: %s\n", err)
+		hErr := &HandlerError{
+			StatusCode: response.BAD_REQ,
+			Message:    err.Error(),
+		}
+		hErr.Write(conn)
 	}
 
-	var buf []byte
-	buffer := bytes.NewBuffer(buf)
-	handlerError := handler(buffer, req)
-
-	err = response.WriteStatusLine(conn, response.StatusCode(handlerError.StatusCode))
-	if err != nil {
-		log.Fatalf("could not write Status Line: %s\n", err)
+	buffer := bytes.NewBuffer([]byte{})
+	handlerError := s.handler(buffer, req)
+	if handlerError != nil {
+		handlerError.Write(conn)
+		return
 	}
 
+	response.WriteStatusLine(conn, response.OK)
 	headers := response.GetDefaultHeaders(buffer.Len())
-	err = response.WriteHeaders(conn, headers)
-	if err != nil {
-		log.Fatalf("could not write headers: %s", err)
-	}
+	response.WriteHeaders(conn, headers)
 
-	_, err = conn.Write(buffer.Bytes())
-	if err != nil {
-		log.Fatalf("could not write body: %s", err)
-	}
+	conn.Write(buffer.Bytes())
 }
