@@ -9,9 +9,9 @@ import (
 type StatusCode int
 
 const (
-	OK = 200
-	BAD_REQ = 400
-	INTERNAL_ERROR = 500
+	OK             StatusCode = 200
+	BAD_REQ        StatusCode = 400
+	INTERNAL_ERROR StatusCode = 500
 )
 
 func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
@@ -22,7 +22,7 @@ func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
 	case BAD_REQ:
 		msg = "HTTP/1.1 400 Bad Request"
 	case INTERNAL_ERROR:
-		msg = "HTTP/1.1  500 Server Error"
+		msg = "HTTP/1.1 500 Server Error"
 	default:
 		msg = ""
 	}
@@ -49,8 +49,5 @@ func WriteHeaders(w io.Writer, headers headers.Headers) error {
 		}
 	}
 	_, err := w.Write([]byte("\r\n"))
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
