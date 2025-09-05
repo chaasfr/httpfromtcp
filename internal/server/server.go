@@ -1,6 +1,7 @@
 package server
 
 import (
+	"HTTPFROMTCP/internal/response"
 	"log"
 	"net"
 )
@@ -51,9 +52,13 @@ func (s *Server) listen() {
 }
 
 func (s *Server) handle(conn net.Conn) {
-	data := "HTTP/1.1 200 OK \r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello World!\n"
-	_, err := conn.Write([]byte(data))
+	err := response.WriteStatusLine(conn, response.OK)
 	if err != nil {
-		log.Fatalf("could not open conn %s: %s\n", conn, err)
+		log.Fatalf("could not write Status Line: %s\n", err)
+	}
+
+	err = response.WriteHeaders(conn, response.GetDefaultHeaders(0))
+	if err != nil {
+		log.Fatalf("could not write headers: %s", err)
 	}
 }
