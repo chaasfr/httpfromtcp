@@ -32,6 +32,10 @@ func (h Headers) Replace(key, value string) {
 	h[strings.ToLower(key)] = value
 }
 
+func (h Headers) Remove(key string) {
+	delete(h, key)
+}
+
 func (h Headers) Get(key string)(string) {
 	lkey := strings.ToLower(key)
 	if val, ok := h[lkey]; ok {

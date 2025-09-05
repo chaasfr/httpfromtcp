@@ -92,3 +92,18 @@ func (w *Writer) WriteBody(p []byte) (int, error) {
 	w.Body = p
 	return w.Writer.Write(w.Body)
 }
+
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	n := fmt.Sprintf("%X", len(p))
+	txt := string(p)
+	// fmt.Println("== new chunk ==")
+	// fmt.Println(n)
+	// fmt.Println(txt)
+	// fmt.Println("== end chunk ==")
+	return w.Writer.Write([]byte(n + "\r\n" + txt + "\r\n"))
+}
+
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	txt := "0\r\n\r\n"
+	return w.Writer.Write([]byte(txt))
+}

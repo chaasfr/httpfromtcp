@@ -36,3 +36,13 @@ func (he HandlerError) ToHTML() string {
   </body>
 </html>`, he.Title, he.SubTitle, he.Message)
 }
+
+func (hErr HandlerError) WriteHTML(w *response.Writer) {
+	body := []byte(hErr.ToHTML())
+	h := response.GetDefaultHeaders(len(body))
+	h.Replace("content-type", "text/html")
+
+	w.WriteStatusLine(hErr.StatusCode)
+	w.WriteHeaders(h)
+	w.WriteBody(body)
+}
