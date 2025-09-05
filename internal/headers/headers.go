@@ -2,18 +2,52 @@ package headers
 
 import (
 	"bytes"
-	"errors"
+	"fmt"
+	"slices"
 	"strings"
 )
 
 const crlf = "\r\n"
 
-const allowedCharsForKey="abcdefghijklmnopqrstuvwxyz0123456789!#$%&'*+-.^_`|~"
-
 type Headers map[string]string
 
-func NewHeaders()(Headers) {
-	return Headers{}
+func NewHeaders() Headers {
+	return map[string]string{}
+}
+
+func (h Headers) Parse(data []byte) (n int, done bool, err error) {
+	// print the data with crlf encoding
+
+	idx := bytes.Index(data, []byte(crlf))
+	if idx == -1 {
+		return 0, false, nil
+	}
+	if idx == 0 {
+		// the empty line
+		// headers are done, consume the CRLF
+		return 2, true, nil
+	}
+
+	parts := bytes.SplitN(data[:idx], []byte(":"), 2)
+	key := strings.ToLower(string(parts[0]))
+
+	if key != strings.TrimRight(key, " ") {
+		return 0, false, fmt.Errorf("invalid header name: %s", key)
+	}
+
+	value := bytes.TrimSpace(parts[1])
+	key = strings.TrimSpace(key)
+	if !validTokens([]byte(key)) {
+		return 0, false, fmt.Errorf("invalid header token found: %s", key)
+	}
+	h.Set(key, string(value))
+	return idx + 2, false, nil
+}
+
+func (h Headers) Get(key string) (string, bool) {
+	key = strings.ToLower(key)
+	v, ok := h[key]
+	return v, ok
 }
 
 func (h Headers) Set(key, value string) {
@@ -28,57 +62,35 @@ func (h Headers) Set(key, value string) {
 	h[key] = value
 }
 
-func (h Headers) Replace(key, value string) {
-	h[strings.ToLower(key)] = value
+func (h Headers) Override(key, value string) {
+	key = strings.ToLower(key)
+	h[key] = value
 }
 
 func (h Headers) Remove(key string) {
+	key = strings.ToLower(key)
 	delete(h, key)
 }
 
-func (h Headers) Get(key string)(string) {
-	lkey := strings.ToLower(key)
-	if val, ok := h[lkey]; ok {
-		return val
-	} 
-	return ""
-}
+var tokenChars = []byte{'!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'}
 
-func (h Headers) Parse(data []byte) (n int, done bool, err error) {
-	idx := bytes.Index(data, []byte(crlf))
-	if idx == -1 {
-		return 0, false, nil
-	}
-	
-	if idx == 0 {
-		return 2, true, nil
-	}
-
-	text := string(data[:idx])
-	sliced := strings.SplitN(text, ":",2)
-
-	if len(sliced) < 2 {
-		return 0, false, errors.New("wrong header format: missing a ':' in "+ text)
-	}
-
-	if strings.HasSuffix(sliced[0], " ") {
-		return 0, false, errors.New("wrong header format: unexpected whitespace before ':'")
-	}
-
-	key := strings.ToLower(strings.TrimLeft(sliced[0], " "))
-
-	if len(key) < 1 {
-		return 0, false, errors.New("header key must have a length of 1 or more")
-	}
-
-	for _, l := range key {
-		if !strings.Contains(allowedCharsForKey,string(l)) {
-			return 0, false, errors.New("wrong character " + string(l) + "in header key " + key)
+// validTokens checks if the data contains only valid tokens
+// or characters that are allowed in a token
+func validTokens(data []byte) bool {
+	for _, c := range data {
+		if !isTokenChar(c) {
+			return false
 		}
 	}
+	return true
+}
 
-	value := strings.Trim(sliced[1], " ")
+func isTokenChar(c byte) bool {
+	if c >= 'A' && c <= 'Z' ||
+		c >= 'a' && c <= 'z' ||
+		c >= '0' && c <= '9' {
+		return true
+	}
 
-	h.Set(key, string(value))
-	return idx + 2, false, nil
+	return slices.Contains(tokenChars, c)
 }

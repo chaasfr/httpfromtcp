@@ -1,9 +1,7 @@
 package main
 
 import (
-	"HTTPFROMTCP/internal/request"
-	"HTTPFROMTCP/internal/response"
-	"HTTPFROMTCP/internal/server"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
@@ -12,113 +10,14 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+
+	"HTTPFROMTCP/internal/headers"
+	"HTTPFROMTCP/internal/request"
+	"HTTPFROMTCP/internal/response"
+	"HTTPFROMTCP/internal/server"
 )
 
 const port = 42069
-
-func handler(w *response.Writer, req *request.Request) {
-	switch req.RequestLine.RequestTarget {
-	case "/yourproblem":
-		handleYourProblem(w)
-	case "/myproblem":
-		handleMyProblem(w)
-	default:
-		if strings.HasPrefix(req.RequestLine.RequestTarget, "/httpbin/") {
-			handleHttpbinProx(w, req.RequestLine.RequestTarget)
-		} else {
-			handleSucess(w)
-		}
-	}
-}
-
-func handleHttpbinProx(w *response.Writer, target string) {
-	endpoint := "https://httpbin.org/" + strings.TrimPrefix(target, "/httpbin/")
-	fmt.Println("rerouting to "+ endpoint)
-	
-	resp, err := http.Get(endpoint)
-	if err != nil {
-		hErr := server.HandlerError{
-			StatusCode : response.BAD_REQ,
-			Title: "400 Bad Request",
-			SubTitle: "Could not reach " + target,
-			Message: err.Error(),
-		}
-		hErr.Write(w)
-		return
-	}
-	defer resp.Body.Close()
-	
-	h := response.GetDefaultHeaders(0)
-	h.Remove("content-length")
-	h.Set("Transfer-Encoding", "chunked")
-	w.WriteStatusLine(response.OK)
-	w.WriteHeaders(h)
-
-	n := -1
-	bufferSize := 1024
-	buffer := make([]byte,bufferSize)
-	for err != io.EOF {
-		n, err = resp.Body.Read(buffer)
-		if err != nil && err != io.EOF {
-			fmt.Println(err)
-			hErr := server.HandlerError{
-				StatusCode : response.BAD_REQ,
-				Title: "500 Intenral Error",
-				SubTitle: "Could not read reply from hhtpbin",
-				Message: err.Error(),
-			}
-			w.WriteChunkedBodyDone()
-			hErr.Write(w)
-			resp.Body.Close()
-			return
-		}
-		fmt.Printf("read %d bytes from httpbin\n", n)
-		_, err := w.WriteChunkedBody(buffer[:n])
-		if err != nil {
-			fmt.Println(err)
-			hErr := server.HandlerError{
-				StatusCode : response.BAD_REQ,
-				Title: "500 Intenral Error",
-				SubTitle: "Could not write chunked body",
-				Message: err.Error(),
-			}
-			w.WriteChunkedBodyDone()
-			hErr.Write(w)
-			resp.Body.Close()
-			return
-		}
-	}
-}
-
-func handleSucess(w *response.Writer) {
-	hErr := server.HandlerError{
-		StatusCode : response.OK,
-		Title: "200 OK",
-		SubTitle: "Success!",
-		Message: "Your request was an absolute banger.",
-	}
-	hErr.WriteHTML(w)
-}
-
-func handleYourProblem(w *response.Writer) {
-	hErr := server.HandlerError{
-		StatusCode : response.BAD_REQ,
-		Title: "400 Bad Request",
-		SubTitle: "Bad Request",
-		Message: "Your request honestly kinda sucked.",
-	}
-	hErr.WriteHTML(w)
-}
-
-func handleMyProblem(w *response.Writer) {
-	hErr := server.HandlerError{
-		StatusCode : response.INTERNAL_ERROR,
-		Title: "500 Internal Server Error",
-		SubTitle: "Internal Server Error",
-		Message: "Okay, you know what? This one is on me.",
-	}
-	hErr.WriteHTML(w)
-}
 
 func main() {
 	server, err := server.Serve(port, handler)
@@ -132,4 +31,133 @@ func main() {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 	log.Println("Server gracefully stopped")
+}
+
+func handler(w *response.Writer, req *request.Request) {
+	if strings.HasPrefix(req.RequestLine.RequestTarget, "/httpbin") {
+		proxyHandler(w, req)
+		return
+	}
+	if req.RequestLine.RequestTarget == "/yourproblem" {
+		handler200(w, req)
+		return
+	}
+	if req.RequestLine.RequestTarget == "/myproblem" {
+		handler500(w, req)
+		return
+	}
+	handler200(w, req)
+	return
+}
+
+func handler400(w *response.Writer, _ *request.Request) {
+	w.WriteStatusLine(response.StatusCodeBadRequest)
+	body := []byte(`<html>
+<head>
+<title>400 Bad Request</title>
+</head>
+<body>
+<h1>Bad Request</h1>
+<p>Your request honestly kinda sucked.</p>
+</body>
+</html>
+`)
+	h := response.GetDefaultHeaders(len(body))
+	h.Override("Content-Type", "text/html")
+	w.WriteHeaders(h)
+	w.WriteBody(body)
+	return
+}
+
+func handler500(w *response.Writer, _ *request.Request) {
+	w.WriteStatusLine(response.StatusCodeInternalServerError)
+	body := []byte(`<html>
+<head>
+<title>500 Internal Server Error</title>
+</head>
+<body>
+<h1>Internal Server Error</h1>
+<p>Okay, you know what? This one is on me.</p>
+</body>
+</html>
+`)
+	h := response.GetDefaultHeaders(len(body))
+	h.Override("Content-Type", "text/html")
+	w.WriteHeaders(h)
+	w.WriteBody(body)
+}
+
+func handler200(w *response.Writer, _ *request.Request) {
+	w.WriteStatusLine(response.StatusCodeSuccess)
+	body := []byte(`<html>
+<head>
+<title>200 OK</title>
+</head>
+<body>
+<h1>Success!</h1>
+<p>Your request was an absolute banger.</p>
+</body>
+</html>
+`)
+	h := response.GetDefaultHeaders(len(body))
+	h.Override("Content-Type", "text/html")
+	w.WriteHeaders(h)
+	w.WriteBody(body)
+	return
+}
+
+func proxyHandler(w *response.Writer, req *request.Request) {
+	target := strings.TrimPrefix(req.RequestLine.RequestTarget, "/httpbin/")
+	url := "https://httpbin.org/" + target
+	fmt.Println("Proxying to", url)
+	resp, err := http.Get(url)
+	if err != nil {
+		handler500(w, req)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.WriteStatusLine(response.StatusCodeSuccess)
+	h := response.GetDefaultHeaders(0)
+	h.Override("Transfer-Encoding", "chunked")
+	h.Override("Trailer", "X-Content-SHA256, X-Content-Length")
+	h.Remove("Content-Length")
+	w.WriteHeaders(h)
+
+	fullBody := make([]byte, 0)
+
+	const maxChunkSize = 1024
+	buffer := make([]byte, maxChunkSize)
+	for {
+		n, err := resp.Body.Read(buffer)
+		fmt.Println("Read", n, "bytes")
+		if n > 0 {
+			_, err = w.WriteChunkedBody(buffer[:n])
+			if err != nil {
+				fmt.Println("Error writing chunked body:", err)
+				break
+			}
+			fullBody = append(fullBody, buffer[:n]...)
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Println("Error reading response body:", err)
+			break
+		}
+	}
+	_, err = w.WriteChunkedBodyDone()
+	if err != nil {
+		fmt.Println("Error writing chunked body done:", err)
+	}
+	trailers := headers.NewHeaders()
+	sha256 := fmt.Sprintf("%x", sha256.Sum256(fullBody))
+	trailers.Override("X-Content-SHA256", sha256)
+	trailers.Override("X-Content-Length", fmt.Sprintf("%d", len(fullBody)))
+	err = w.WriteTrailers(trailers)
+	if err != nil {
+		fmt.Println("Error writing trailers:", err)
+	}
+	fmt.Println("Wrote trailers")
 }

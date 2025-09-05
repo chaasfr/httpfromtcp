@@ -1,70 +1,70 @@
 package server
 
 import (
-	"HTTPFROMTCP/internal/request"
-	"HTTPFROMTCP/internal/response"
+	"fmt"
 	"log"
 	"net"
+	"sync/atomic"
+
+	"HTTPFROMTCP/internal/request"
+	"HTTPFROMTCP/internal/response"
 )
 
-type ServerState int
+type Handler func(w *response.Writer, req *request.Request)
 
-const (
-	INITIALIZED ServerState = iota
-	CLOSED
-)
-
+// Server is an HTTP 1.1 server
 type Server struct {
-	ServerState ServerState
+	handler  Handler
 	listener net.Listener
-	handler Handler
+	closed   atomic.Bool
 }
 
 func Serve(port int, handler Handler) (*Server, error) {
-	ln, err := net.Listen("tcp", ":42069")
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
 	}
-	server := &Server{
-		ServerState: INITIALIZED,
-		listener: ln,
-		handler: handler,
+	s := &Server{
+		handler:  handler,
+		listener: listener,
 	}
-	go server.listen()
-
-	return server, nil
+	go s.listen()
+	return s, nil
 }
 
 func (s *Server) Close() error {
-	err := s.listener.Close()
-	if err != nil {
-		return err
+	s.closed.Store(true)
+	if s.listener != nil {
+		return s.listener.Close()
 	}
-	s.ServerState = CLOSED
 	return nil
 }
 
 func (s *Server) listen() {
-	for s.ServerState != CLOSED {
+	for {
 		conn, err := s.listener.Accept()
 		if err != nil {
-			log.Fatalf("could not open conn %s: %s\n", conn, err)
+			if s.closed.Load() {
+				return
+			}
+			log.Printf("Error accepting connection: %v", err)
+			continue
 		}
 		go s.handle(conn)
 	}
 }
 
 func (s *Server) handle(conn net.Conn) {
+	defer conn.Close()
 	w := response.NewWriter(conn)
 	req, err := request.RequestFromReader(conn)
 	if err != nil {
-		hErr := &HandlerError{
-			StatusCode: response.BAD_REQ,
-			Message:    err.Error(),
-		}
-		hErr.Write(w)
+		w.WriteStatusLine(response.StatusCodeBadRequest)
+		body := []byte(fmt.Sprintf("Error parsing request: %v", err))
+		w.WriteHeaders(response.GetDefaultHeaders(len(body)))
+		w.WriteBody(body)
+		return
 	}
-
 	s.handler(w, req)
+	return
 }
-
